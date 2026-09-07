@@ -2,13 +2,13 @@
 "use client";
 
 import React, { createContext, useContext, useReducer, ReactNode } from "react";
-import { CartContextType} from "./cartTypes";
+import { CartContextType, CartItem } from "./cartTypes";
 import { cartReducer, initialCartState } from "./cartReducer";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 
-export type { CartItem } from "./cartTypes"
+export type { CartItem };
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider = ({ children }: { children: ReactNode }) => {

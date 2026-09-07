@@ -1,12 +1,12 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
   experimental: {
     reactCompiler: true,
   },
 
-
-  // outputFileTracingRoot: "C:/Users/mohdm/development/click trick/artiory_frontend",
+  outputFileTracingRoot: path.resolve(__dirname),
 
 
   images: {
