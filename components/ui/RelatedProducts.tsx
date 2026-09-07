@@ -120,7 +120,7 @@ const RelatedProducts: React.FC<RelatedProductsProps> = ({ category, currentProd
                 : null;
               return (
                 <div key={p.id} className="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden flex flex-col">
-                  <Link href={`/product/${p.id}`} className="relative block aspect-square bg-gray-50 overflow-hidden">
+                  <Link href={`/product/${p.id}`} className="relative block aspect-square bg-white overflow-hidden">
                     {/* Badges */}
                     <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
                       {p.isSale && <span className="bg-red-500 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full">SALE</span>}
@@ -143,11 +143,11 @@ const RelatedProducts: React.FC<RelatedProductsProps> = ({ category, currentProd
                     </div>
                     {/* Images */}
                     {p.image
-                      ? <img src={p.image} alt={p.name} className={`h-full w-full contain transition-opacity duration-300 ${p.images && p.images.length > 1 ? "group-hover:opacity-0" : ""}`} />
+                      ? <img src={p.image} alt={p.name} className={`h-full w-full object-cover object-center transition-opacity duration-300 ${p.images && p.images.length > 1 && p.images[1] && p.images[1] !== (p.image || p.images[0]) ? "group-hover:opacity-0" : ""}`} />
                       : <div className="h-full w-full flex items-center justify-center text-gray-300 text-xs">No Image</div>
                     }
-                    {p.images && p.images[1] && (
-                      <img src={p.images[1]} alt={p.name} className="h-full w-full contain  absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    {p.images && p.images.length > 1 && p.images[1] && p.images[1] !== (p.image || p.images[0]) && (
+                      <img src={p.images[1]} alt={p.name} className="h-full w-full object-cover object-center absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     )}
                   </Link>
 

@@ -3,7 +3,7 @@ import React, { useEffect } from "react";
 import { Londrina_Solid } from "next/font/google";
 import Image from "next/image";
 import { signIn, useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 const londrina = Londrina_Solid({
   weight: ["100", "300", "400", "900"],
@@ -13,13 +13,16 @@ const londrina = Londrina_Solid({
 
 export default function SignUp() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session, status } = useSession();
+
+  const callbackUrl = searchParams.get("callbackUrl") || "/";
 
   useEffect(() => {
     if (status === 'authenticated' && session) {
-      router.push("/");
+      router.push(callbackUrl);
     }
-  }, [session, status, router]);
+  }, [session, status, router, callbackUrl]);
 
   return (
     <section className="min-h-screen flex flex-col items-center justify-center px-4">
@@ -40,7 +43,7 @@ export default function SignUp() {
         {/* Google Button */}
         <button
           type="button"
-          onClick={() => signIn("google", { callbackUrl: "/" })}
+          onClick={() => signIn("google", { callbackUrl })}
           className="w-full flex items-center justify-center gap-3 border border-gray-300 rounded-xl py-3 px-4 mb-6 shadow-md hover:scale-105 transition bg-white"
         >
           <Image width={20} height={20} src="https://cdn-icons-png.flaticon.com/128/281/281764.png" alt="Google Icon" />

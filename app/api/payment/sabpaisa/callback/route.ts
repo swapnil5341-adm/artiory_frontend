@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getTargetBackendUrl } from "@/lib/auth";
+import { getTargetBackendUrl, getPublicSiteOrigin } from "@/lib/auth";
 
 const API_BASE_URL = getTargetBackendUrl();
 
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       method: "GET",
     }).catch((e) => console.error("Async backend sync error:", e));
 
-    const origin = req.nextUrl.origin || "http://localhost:3000";
+    const origin = getPublicSiteOrigin(req);
     if (isSuccess) {
       return NextResponse.redirect(`${origin}/profile?tab=orders&highlight=${orderId}`);
     } else {
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     }
   } catch (error) {
     console.error("Sabpaisa callback GET handler error:", error);
-    const origin = req.nextUrl.origin || "http://localhost:3000";
+    const origin = getPublicSiteOrigin(req);
     return NextResponse.redirect(`${origin}/profile?tab=orders`);
   }
 }
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     const orderId = merchantTxnId.split("-")[0] || "";
     const isSuccess = status.toUpperCase() === "SUCCESS" || status.toUpperCase() === "TXN_SUCCESS" || status.toUpperCase() === "PAID";
 
-    const origin = req.nextUrl.origin || "http://localhost:3000";
+    const origin = getPublicSiteOrigin(req);
     if (isSuccess) {
       return NextResponse.redirect(`${origin}/profile?tab=orders&highlight=${orderId}`);
     } else {
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     }
   } catch (error) {
     console.error("Sabpaisa callback POST handler error:", error);
-    const origin = req.nextUrl.origin || "http://localhost:3000";
+    const origin = getPublicSiteOrigin(req);
     return NextResponse.redirect(`${origin}/profile?tab=orders`);
   }
 }

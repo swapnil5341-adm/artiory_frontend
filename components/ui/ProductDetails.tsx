@@ -10,8 +10,6 @@ import {
   ChevronRight,
   ShoppingCart,
   Star,
-  X,
-  ZoomIn,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import { useState, useRef, useEffect } from "react";
@@ -56,14 +54,25 @@ export default function ProductDetail({ product }: { product: ProductType }) {
   const { wishlistDispatch, wishlistState } = useWishlist();
   const [quantity, setQuantity] = useState(1);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [touchStartX, setTouchStartX] = useState(0);
-  const [touchEndX, setTouchEndX] = useState(0);
+  const [isDesktopHover, setIsDesktopHover] = useState(false);
   const [hoverZoom, setHoverZoom] = useState(false);
   const [hoverPos, setHoverPos] = useState({ x: 50, y: 50 });
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
-  const [zoomOpen, setZoomOpen] = useState(false);
-  const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
   const imageRef = useRef<HTMLDivElement>(null);
+  const touchStartXRef = useRef<number | null>(null);
+  const touchEndXRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
+      setIsDesktopHover(mq.matches);
+      const handler = (e: MediaQueryListEvent) => setIsDesktopHover(e.matches);
+      if (mq.addEventListener) {
+        mq.addEventListener("change", handler);
+        return () => mq.removeEventListener("change", handler);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -82,18 +91,31 @@ export default function ProductDetail({ product }: { product: ProductType }) {
 
   const handlePrev = () => setCurrentIndex((p) => (p === 0 ? displayImages.length - 1 : p - 1));
   const handleNext = () => setCurrentIndex((p) => (p === displayImages.length - 1 ? 0 : p + 1));
-  const handleTouchStart = (e: React.TouchEvent) => setTouchStartX(e.targetTouches[0].clientX);
-  const handleTouchMove = (e: React.TouchEvent) => setTouchEndX(e.targetTouches[0].clientX);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setHoverZoom(false);
+    touchStartXRef.current = e.targetTouches[0].clientX;
+    touchEndXRef.current = e.targetTouches[0].clientX;
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndXRef.current = e.targetTouches[0].clientX;
+  };
   const handleTouchEnd = () => {
-    if (touchStartX - touchEndX > 50) handleNext();
-    if (touchEndX - touchStartX > 50) handlePrev();
+    if (touchStartXRef.current !== null && touchEndXRef.current !== null) {
+      const diff = touchStartXRef.current - touchEndXRef.current;
+      if (diff > 50) handleNext();
+      else if (diff < -50) handlePrev();
+    }
+    touchStartXRef.current = null;
+    touchEndXRef.current = null;
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDesktopHover) return;
     const rect = imageRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
     setHoverPos({ x, y });
     setCursorPos({ x: e.clientX, y: e.clientY });
   };
@@ -152,14 +174,15 @@ export default function ProductDetail({ product }: { product: ProductType }) {
           {/* Main Image (Cut-to-Cut Edge-to-Edge Large Display) */}
           <div
             ref={imageRef}
-            className="relative flex-1 w-full aspect-square max-w-full rounded-2xl sm:rounded-3xl border border-gray-200/80 shadow-md overflow-hidden bg-white cursor-crosshair flex items-center justify-center p-0"
+            className="relative flex-1 w-full aspect-square max-w-full rounded-2xl sm:rounded-3xl border border-gray-200/80 shadow-md overflow-hidden bg-white cursor-default lg:cursor-crosshair flex items-center justify-center p-0"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
             onMouseMove={handleMouseMove}
-            onMouseEnter={() => setHoverZoom(true)}
+            onMouseEnter={() => {
+              if (isDesktopHover) setHoverZoom(true);
+            }}
             onMouseLeave={() => setHoverZoom(false)}
-            onClick={() => setZoomOpen(true)}
           >
             <img
               src={mainImage}
@@ -189,13 +212,13 @@ export default function ProductDetail({ product }: { product: ProductType }) {
             )}
           </div>
 
-          {/* Hover Zoom Window — fixed near cursor */}
-          {hoverZoom && (
+          {/* Hover Zoom Window — Desktop mouse only */}
+          {isDesktopHover && hoverZoom && (
             <div
-              className="fixed z-50 w-[420px] h-[420px] lg:w-[500px] lg:h-[500px] rounded-2xl border border-gray-200 shadow-2xl overflow-hidden bg-white pointer-events-none hidden md:block"
+              className="fixed z-50 w-[420px] h-[420px] lg:w-[480px] lg:h-[480px] xl:w-[520px] xl:h-[520px] rounded-2xl border border-gray-200 shadow-2xl overflow-hidden bg-white pointer-events-none hidden lg:block"
               style={{
-                top: cursorPos.y - 250,
-                left: cursorPos.x + 30,
+                top: Math.max(20, Math.min(typeof window !== "undefined" ? window.innerHeight - 540 : cursorPos.y - 250, cursorPos.y - 250)),
+                left: typeof window !== "undefined" && cursorPos.x + 550 > window.innerWidth ? Math.max(20, cursorPos.x - 540) : cursorPos.x + 30,
               }}
             >
               <img
@@ -420,43 +443,6 @@ export default function ProductDetail({ product }: { product: ProductType }) {
 
       {/* Related */}
       <RelatedProducts category={product.category} currentProductId={String(product.id)} />
-
-      {/* Click Fullscreen Zoom Overlay */}
-      {zoomOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center" onClick={() => setZoomOpen(false)}>
-          <button className="absolute top-4 right-4 bg-white rounded-full p-2 shadow-lg z-10" onClick={() => setZoomOpen(false)}>
-            <X className="w-5 h-5 text-gray-700" />
-          </button>
-          {displayImages.length > 1 && (
-            <>
-              <button onClick={(e) => { e.stopPropagation(); handlePrev(); }} className="absolute left-4 top-1/2 -translate-y-1/2 bg-white rounded-full p-2 shadow-lg z-10">
-                <ChevronLeft className="w-6 h-6 text-[#1e1e4d]" />
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); handleNext(); }} className="absolute right-4 top-1/2 -translate-y-1/2 bg-white rounded-full p-2 shadow-lg z-10">
-                <ChevronRight className="w-6 h-6 text-[#1e1e4d]" />
-              </button>
-            </>
-          )}
-          <div
-            className="relative w-[92vw] h-[88vh] overflow-hidden rounded-2xl bg-white cursor-crosshair"
-            onClick={(e) => e.stopPropagation()}
-            onMouseMove={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              setZoomPos({
-                x: ((e.clientX - rect.left) / rect.width) * 100,
-                y: ((e.clientY - rect.top) / rect.height) * 100,
-              });
-            }}
-          >
-            <img
-              src={mainImage}
-              alt={product.name}
-              className="w-full h-full object-contain"
-              style={{ transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`, transform: "scale(2.5)" }}
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

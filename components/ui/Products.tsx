@@ -1,8 +1,8 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Londrina_Solid } from "next/font/google";
 import { useCart } from "@/app/context/cart/Cartcontext";
-import { HeartIcon, ShoppingCart } from "lucide-react";
+import { HeartIcon, ShoppingCart, ChevronDown } from "lucide-react";
 import { ToastContainer, toast } from "react-toastify";
 import Link from "next/link";
 import { useWishlist } from "@/app/context/whishlist/WishlistContext";
@@ -32,6 +32,22 @@ const Products: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsMoreOpen(false);
+      }
+    };
+    if (isMoreOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isMoreOpen]);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -50,15 +66,19 @@ const Products: React.FC = () => {
         const finalProducts = list.map((item: any, index: number) => {
           const price = Number(item.sellingPrice ?? item.price ?? 0);
           const mrp = Number(item.mrp ?? item.price ?? 0);
-          const images = Array.isArray(item.images) && item.images.length > 0
-            ? item.images
-            : [item.image || item.thumbnail || "/product/placeholder.svg"];
+          const rawImages: string[] = Array.isArray(item.images)
+            ? item.images.filter((img: unknown): img is string => typeof img === "string" && img.trim().length > 0)
+            : [];
+          const mainImg = typeof item.image === "string" && item.image.trim()
+            ? item.image
+            : (item.thumbnail || rawImages[0] || "/product/placeholder.svg");
+          const images = [...new Set(rawImages.length > 0 ? [mainImg, ...rawImages] : [mainImg])];
           return {
             id: String(item._id || item.id || index + 1),
             name: item.productName || item.name || "",
             price,
             oldPrice: mrp > price ? mrp : undefined,
-            image: item.image || item.thumbnail || images[0] || "/product/placeholder.svg",
+            image: mainImg,
             images,
             category: item.category || "",
             shortDescription: item.shortDescription || item.shortDesc || "",
@@ -98,6 +118,15 @@ const Products: React.FC = () => {
     : products.filter((p) => p.category === selectedCategory);
 
   const categories = ["All", ...Array.from(new Set(products.map((p) => p.category).filter(Boolean)))];
+
+  // For mobile/tablet: Single compact row without slider/scroll (3 main tabs + 1 More button)
+  const otherCategories = categories.filter((c) => c !== "All");
+  const defaultTopTwo = otherCategories.slice(0, 2);
+  let mobileTabs = ["All", ...defaultTopTwo];
+  if (selectedCategory !== "All" && !defaultTopTwo.includes(selectedCategory)) {
+    mobileTabs = ["All", defaultTopTwo[0] || "All", selectedCategory].filter(Boolean);
+  }
+  const isSelectedInMore = !mobileTabs.includes(selectedCategory);
 
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
   const paginatedProducts = filteredProducts.slice(
@@ -188,9 +217,14 @@ const Products: React.FC = () => {
 
   if (loading) {
     return (
-      <section className={`${londrina.className} py-16 bg-white`}>
-        <div className="text-center mb-10 px-4">
-          <h1 className="text-4xl md:text-6xl font-extrabold text-[#00b8a2]">OUR PRODUCTS.</h1>
+      <section className={`${londrina.className} py-8 sm:py-12 lg:py-16 bg-white`}>
+        <div className="max-w-7xl mx-auto px-4 mb-5 sm:mb-7 lg:mb-10">
+          <div className="flex flex-row items-center justify-between lg:flex-col lg:justify-center text-left lg:text-center">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-6xl font-extrabold text-[#00b8a2] tracking-wide">
+              OUR PRODUCTS.
+            </h1>
+            <div className="h-4 w-16 sm:w-20 lg:w-24 bg-gray-200 rounded animate-pulse lg:mt-3" />
+          </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5 w-full max-w-7xl mx-auto px-4">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -214,19 +248,108 @@ const Products: React.FC = () => {
   }
 
   return (
-    <section className={`${londrina.className} py-16  bg-white`}>
-      {/* Heading */}
-      <div className="text-center mb-10 px-4">
-        <h1 className="text-4xl md:text-6xl font-extrabold text-[#00b8a2]">
-          OUR PRODUCTS.
-        </h1>
-        <p className="text-2xl cursor-pointer mt-3 text-gray-400">
-          <Link href="/listing">View All</Link>
-        </p>
+    <section className={`${londrina.className} py-8 sm:py-12 lg:py-16 bg-white`}>
+      {/* Heading: Left-Right on Mobile/Tablet, Centered on Desktop */}
+      <div className="max-w-7xl mx-auto px-4 mb-5 sm:mb-7 lg:mb-10">
+        <div className="flex flex-row items-center justify-between lg:flex-col lg:justify-center text-left lg:text-center">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-6xl font-extrabold text-[#00b8a2] tracking-wide">
+            OUR PRODUCTS.
+          </h1>
+          <Link
+            href="/listing"
+            className="group flex items-center gap-1 text-sm sm:text-base md:text-lg lg:text-2xl font-bold lg:font-normal text-gray-400 hover:text-[#00b8a2] transition-colors lg:mt-3 cursor-pointer"
+          >
+            <span>View All</span>
+            <span className="inline-block transition-transform duration-200 group-hover:translate-x-1 lg:hidden text-xs sm:text-sm">
+              →
+            </span>
+          </Link>
+        </div>
       </div>
 
-      {/* Category Tabs */}
-      <div className="flex flex-wrap justify-center gap-2.5 mb-10 px-4">
+      {/* Mobile & Tablet: Compact 1-Row Bar (NO SLIDING/SCROLLING) */}
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 mb-6 sm:mb-8 lg:hidden relative">
+        <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+          {mobileTabs.map((cat) => {
+            const isSelected = selectedCategory === cat;
+            return (
+              <button
+                key={cat}
+                onClick={() => {
+                  setSelectedCategory(cat);
+                  setPage(1);
+                  setIsMoreOpen(false);
+                }}
+                className={`flex items-center justify-center py-2 px-1.5 sm:px-2.5 rounded-xl text-[10px] sm:text-xs font-bold uppercase transition-all duration-200 border cursor-pointer ${
+                  isSelected
+                    ? "bg-[#00b8a2] text-white border-[#00b8a2] shadow-sm shadow-[#00b8a2]/30"
+                    : "bg-gray-50 text-[#2e306a] border-gray-200 hover:border-[#00b8a2] hover:text-[#00b8a2]"
+                }`}
+              >
+                <span className="truncate">{cat}</span>
+              </button>
+            );
+          })}
+
+          {/* More button */}
+          <button
+            onClick={() => setIsMoreOpen((prev) => !prev)}
+            className={`flex items-center justify-center gap-1 py-2 px-1.5 sm:px-2.5 rounded-xl text-[10px] sm:text-xs font-bold uppercase transition-all duration-200 border cursor-pointer ${
+              isMoreOpen || isSelectedInMore
+                ? "bg-[#00b8a2]/15 text-[#00b8a2] border-[#00b8a2] ring-1 ring-[#00b8a2]"
+                : "bg-gray-50 text-[#2e306a] border-gray-200 hover:border-[#00b8a2] hover:text-[#00b8a2]"
+            }`}
+          >
+            <span className="truncate">{isMoreOpen ? "Close" : "More"}</span>
+            <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isMoreOpen ? "rotate-180" : ""}`} />
+          </button>
+        </div>
+
+        {/* Dropdown Card for More Categories (No Slider) */}
+        {isMoreOpen && (
+          <div
+            ref={dropdownRef}
+            className="absolute left-3 right-3 sm:left-auto sm:right-4 top-full mt-2 sm:w-80 bg-white rounded-2xl shadow-xl border border-gray-200 p-3.5 z-30 animate-in fade-in zoom-in-95 duration-150"
+          >
+            <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-gray-100">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                All Categories ({categories.length})
+              </span>
+              <button
+                onClick={() => setIsMoreOpen(false)}
+                className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 text-xs font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 max-h-60 overflow-y-auto pr-1">
+              {categories.map((cat) => {
+                const isSelected = selectedCategory === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => {
+                      setSelectedCategory(cat);
+                      setPage(1);
+                      setIsMoreOpen(false);
+                    }}
+                    className={`flex items-center px-3 py-2 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
+                      isSelected
+                        ? "bg-[#00b8a2] text-white shadow-sm"
+                        : "bg-gray-50 text-[#2e306a] hover:bg-[#00b8a2]/10 hover:text-[#00b8a2]"
+                    }`}
+                  >
+                    <span className="truncate">{cat}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Desktop: Standard Centered Wrap (UNCHANGED) */}
+      <div className="hidden lg:flex flex-wrap justify-center gap-2.5 mb-10 px-4 max-w-7xl mx-auto">
         {categories.map((cat) => (
           <button
             key={cat}
@@ -286,19 +409,23 @@ const Products: React.FC = () => {
                 </div>
 
                 {/* Image */}
-                <div className="relative aspect-square w-full bg-gray-50">
+                <div className="relative aspect-square w-full bg-white overflow-hidden">
                   <img
-                    src={product.image || "/product/placeholder.svg"}
+                    src={product.image || (product.images && product.images[0]) || "/product/placeholder.svg"}
                     alt={product.name}
-                    className={`h-full w-full contain transition-opacity duration-300 ${
-                      product.images && product.images.length > 1 ? "group-hover:opacity-0" : ""
+                    className={`h-full w-full object-cover object-center transition-opacity duration-300 ${
+                      product.images && product.images.length > 1 && product.images[1] !== (product.image || product.images[0])
+                        ? "group-hover:opacity-0"
+                        : ""
                     }`}
+                    loading="lazy"
                   />
-                  {product.images && product.images[1] && (
+                  {product.images && product.images.length > 1 && product.images[1] && product.images[1] !== (product.image || product.images[0]) && (
                     <img
                       src={product.images[1]}
-                      alt={product.name}
-                      className="absolute inset-0 h-full w-full contain opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                      alt={`${product.name} - alternate view`}
+                      className="absolute inset-0 h-full w-full object-cover object-center opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                      loading="lazy"
                     />
                   )}
                 </div>

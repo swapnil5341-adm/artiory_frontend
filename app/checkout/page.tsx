@@ -5,6 +5,7 @@ import { useCart } from "@/app/context/cart/Cartcontext";
 import Link from "next/link";
 import { Londrina_Solid } from "next/font/google";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 const londrina = Londrina_Solid({
   weight: ["100", "300", "400", "900"],
@@ -22,7 +23,14 @@ type CartItem = {
 
 export default function CheckoutPage() {
   const { cartItems, getCartTotal } = useCart();
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/auth/signin?callbackUrl=/checkout");
+    }
+  }, [status, router]);
 
   const [form, setForm] = useState({
     firstName: "",
@@ -272,10 +280,13 @@ export default function CheckoutPage() {
       const orderId = orderJson._id;
 
       if (form.paymentMethod === "sabpaisa") {
+        const currentOrigin = typeof window !== "undefined" && window.location.origin && !window.location.origin.includes("3011")
+          ? window.location.origin
+          : "https://artiory.com";
         const paymentRes = await fetch("/api/payment/sabpaisa/initiate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderId, returnUrl: typeof window !== "undefined" ? window.location.origin : "http://localhost:3000" }),
+          body: JSON.stringify({ orderId, returnUrl: currentOrigin }),
         });
 
         const paymentJson = await paymentRes.json();
@@ -388,6 +399,15 @@ export default function CheckoutPage() {
       checkPincode(value);
     }
   };
+
+  if (status === "loading" || status === "unauthenticated") {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 bg-white">
+        <div className="w-12 h-12 border-4 border-[#00ba82] border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-gray-500 font-medium text-sm">Verifying account access...</p>
+      </div>
+    );
+  }
 
   return (
     <section className={`bg-white py-12 px-4 md:px-10 lg:px-00 xl:px-40 2xl:px-80 text-[#2e306a]`}>

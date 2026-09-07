@@ -25,34 +25,96 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const getCartTotal = () =>
     cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  // Fetch initial cart from backend ONLY once when user logs in or changes
+  const CART_STORAGE_KEY = "artiory_cart";
+
+  const getLocalCart = (): CartItem[] => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem(CART_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  };
+
+  const saveLocalCart = (items: CartItem[]) => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+    } catch {}
+  };
+
+  // Initial load of guest cart from localStorage
+  React.useEffect(() => {
+    const local = getLocalCart();
+    if (local.length > 0 && status !== "authenticated") {
+      dispatch({ type: "SET_CART", payload: local });
+    }
+  }, []);
+
+  // Fetch initial cart from backend when user logs in, and merge any local guest cart
   React.useEffect(() => {
     if (status === "authenticated" && userId) {
       if (lastUserIdRef.current === userId) return;
       lastUserIdRef.current = userId;
 
+      const localItems = getLocalCart();
+
       fetch("/api/users/cart")
         .then((res) => res.json())
         .then((data) => {
+          let backendCart: CartItem[] = [];
           if (data.success && Array.isArray(data.cart)) {
-            const formatted = data.cart.map((item: any) => ({
-              id: item.productId,
+            backendCart = data.cart.map((item: any) => ({
+              id: String(item.productId || item.id),
               name: item.name,
               price: item.price,
               image: item.image,
               quantity: item.quantity,
               stock: item.stock,
             }));
-            dispatch({ type: "SET_CART", payload: formatted });
+          }
+
+          if (localItems.length > 0) {
+            const mergedMap = new Map<string, CartItem>();
+            backendCart.forEach((item) => mergedMap.set(String(item.id), item));
+
+            localItems.forEach((localItem) => {
+              const key = String(localItem.id);
+              if (mergedMap.has(key)) {
+                const existing = mergedMap.get(key)!;
+                const stockLimit = existing.stock ?? localItem.stock ?? 999;
+                const newQty = Math.min(stockLimit, Math.max(existing.quantity, localItem.quantity));
+                mergedMap.set(key, { ...existing, quantity: newQty });
+              } else {
+                mergedMap.set(key, localItem);
+              }
+            });
+
+            const mergedList = Array.from(mergedMap.values());
+            dispatch({ type: "SET_CART", payload: mergedList });
+            saveLocalCart(mergedList);
+            syncCartToBackend(mergedList);
+          } else {
+            dispatch({ type: "SET_CART", payload: backendCart });
+            saveLocalCart(backendCart);
           }
         })
         .catch((err) => {
           console.error("Failed to load cart:", err);
+          if (localItems.length > 0) {
+            dispatch({ type: "SET_CART", payload: localItems });
+          }
         });
     } else if (status === "unauthenticated") {
       if (lastUserIdRef.current !== null) {
         lastUserIdRef.current = null;
         dispatch({ type: "SET_CART", payload: [] });
+        if (typeof window !== "undefined") {
+          localStorage.removeItem(CART_STORAGE_KEY);
+        }
       }
     }
   }, [status, userId]);
@@ -82,15 +144,6 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
   const customDispatch = (action: any) => {
     if (action.type === "ADD_ITEM") {
-      if (!session?.user) {
-        toast.warn("To continue shopping, please register your account.", {
-          position: "top-center",
-          autoClose: 3000,
-        });
-        router.push("/auth/signup");
-        return;
-      }
-
       // Check stock limit for ADD_ITEM
       const existing = cart.items.find((item) => item.id === action.payload.id);
       const stockLimit = action.payload.stock ?? existing?.stock ?? (action.payload.stockQuantity ?? Infinity);
@@ -134,6 +187,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
     if (["ADD_ITEM", "REMOVE_ITEM", "UPDATE_QUANTITY", "CLEAR_CART"].includes(action.type)) {
       const nextState = cartReducer(cart, action);
+      saveLocalCart(nextState.items);
       syncCartToBackend(nextState.items);
     }
   };

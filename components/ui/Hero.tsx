@@ -10,14 +10,14 @@ const slides = [
     title: "Artiory Banner 1",
     desktop: "/Banner1_web.jpeg",
     mobile: "/Banner1_mobile.jpeg",
-    link: "/listing",
+    link: "/listing?all=true",
   },
   {
     id: 2,
     title: "Artiory Banner 2",
     desktop: "/Banner2_web.jpeg",
     mobile: "/Banner2_mobile.jpeg",
-    link: "/listing",
+    link: "/listing?category=Art%20%26%20Craft",
   },
 ];
 

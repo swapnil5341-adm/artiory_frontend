@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
-import { createBackendToken, getTargetBackendUrl } from "@/lib/auth";
+import { createBackendToken, getTargetBackendUrl, getPublicSiteOrigin } from "@/lib/auth";
 
 const API_BASE_URL = getTargetBackendUrl();
 
@@ -18,9 +18,15 @@ export async function POST(req: NextRequest) {
 
     const token = createBackendToken(userObj);
 
+    const publicOrigin = getPublicSiteOrigin(req);
+    let returnUrl = body.returnUrl || publicOrigin;
+    if (returnUrl.includes("3011") || (process.env.NODE_ENV === "production" && returnUrl.includes("localhost"))) {
+      returnUrl = "https://artiory.com";
+    }
+
     const payload = {
       ...body,
-      returnUrl: body.returnUrl || req.nextUrl.origin || "https://artiory.com"
+      returnUrl,
     };
 
     const res = await fetch(`${API_BASE_URL}/api/payment/sabpaisa/initiate`, {

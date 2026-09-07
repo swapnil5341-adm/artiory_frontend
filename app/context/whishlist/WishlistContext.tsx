@@ -31,18 +31,50 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
   const lastUserIdRef = React.useRef<string | null>(null);
   const syncTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch initial wishlist from backend ONLY once when user logs in or changes
+  const WISHLIST_STORAGE_KEY = "artiory_wishlist";
+
+  const getLocalWishlist = (): any[] => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem(WISHLIST_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  };
+
+  const saveLocalWishlist = (items: any[]) => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(items));
+    } catch {}
+  };
+
+  // Initial load of guest wishlist from localStorage
+  React.useEffect(() => {
+    const local = getLocalWishlist();
+    if (local.length > 0 && status !== "authenticated") {
+      wishlistDispatch({ type: "SET_WISHLIST", payload: local });
+    }
+  }, []);
+
+  // Fetch initial wishlist from backend when user logs in or changes, and merge local items
   React.useEffect(() => {
     if (status === "authenticated" && userId) {
       if (lastUserIdRef.current === userId) return;
       lastUserIdRef.current = userId;
 
+      const localItems = getLocalWishlist();
+
       fetch("/api/users/wishlist")
         .then((res) => res.json())
         .then((data) => {
+          let backendWishlist: any[] = [];
           if (data.success && Array.isArray(data.wishlist)) {
-            const formatted = data.wishlist.map((item: any) => ({
-              id: item.productId || item.id,
+            backendWishlist = data.wishlist.map((item: any) => ({
+              id: String(item.productId || item.id),
               name: item.name,
               price: item.price,
               image: item.image,
@@ -50,16 +82,39 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
               stockQuantity: item.stockQuantity !== undefined ? item.stockQuantity : item.stock,
               isOutOfStock: item.isOutOfStock !== undefined ? item.isOutOfStock : ((item.stock !== undefined && item.stock <= 0) || (item.stockQuantity !== undefined && item.stockQuantity <= 0)),
             }));
-            wishlistDispatch({ type: "SET_WISHLIST", payload: formatted });
+          }
+
+          if (localItems.length > 0) {
+            const mergedMap = new Map<string, any>();
+            backendWishlist.forEach((item) => mergedMap.set(String(item.id), item));
+            localItems.forEach((localItem) => {
+              const key = String(localItem.id);
+              if (!mergedMap.has(key)) {
+                mergedMap.set(key, localItem);
+              }
+            });
+            const mergedList = Array.from(mergedMap.values());
+            wishlistDispatch({ type: "SET_WISHLIST", payload: mergedList });
+            saveLocalWishlist(mergedList);
+            syncWishlistToBackend(mergedList);
+          } else {
+            wishlistDispatch({ type: "SET_WISHLIST", payload: backendWishlist });
+            saveLocalWishlist(backendWishlist);
           }
         })
         .catch((err) => {
           console.error("Failed to load wishlist:", err);
+          if (localItems.length > 0) {
+            wishlistDispatch({ type: "SET_WISHLIST", payload: localItems });
+          }
         });
     } else if (status === "unauthenticated") {
       if (lastUserIdRef.current !== null) {
         lastUserIdRef.current = null;
         wishlistDispatch({ type: "SET_WISHLIST", payload: [] });
+        if (typeof window !== "undefined") {
+          localStorage.removeItem(WISHLIST_STORAGE_KEY);
+        }
       }
     }
   }, [status, userId]);
@@ -89,21 +144,11 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const customWishlistDispatch = (action: any) => {
-    if (action.type === "ADD_TO_WISHLIST") {
-      if (!session?.user) {
-        toast.warn("To continue shopping, please register your account.", {
-          position: "top-center",
-          autoClose: 3000,
-        });
-        router.push("/auth/signup");
-        return;
-      }
-    }
-
     wishlistDispatch(action);
 
     if (["ADD_TO_WISHLIST", "REMOVE_FROM_WISHLIST", "CLEAR_WISHLIST"].includes(action.type)) {
       const nextState = wishlistReducer(wishlistState, action);
+      saveLocalWishlist(nextState.items);
       syncWishlistToBackend(nextState.items);
     }
   };

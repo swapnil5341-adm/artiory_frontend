@@ -57,20 +57,78 @@ const categoryGroups: { label: string;  items: string[] }[] = [
   { label: "Gifts & Fun",  items: ["Metal Money Box", "Gift Hamper", "Mini Fan", "Tissue Paper Box"] },
 ];
 
+function normalizeCategoryMatch(str: string) {
+  if (!str) return "";
+  let res = str.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (res === "artscraft" || res === "artsandcraft" || res === "artandcraft" || res === "artsandcrafts") {
+    res = "artcraft";
+  }
+  if (res === "drinkwarelunchware" || res === "drinkware" || res === "lunchware") {
+    res = "drinkwarelunchware";
+  }
+  return res;
+}
 
+function expandCategorySelection(rawList: string[]): { selected: string[]; openGroups: string[] } {
+  const selected: string[] = [];
+  const openGroups: string[] = [];
+
+  rawList.forEach((item) => {
+    const nItem = normalizeCategoryMatch(item);
+    const matchingGroup = categoryGroups.find((g) => normalizeCategoryMatch(g.label) === nItem);
+    if (matchingGroup) {
+      // Group specified (e.g. Art & Craft) -> tick all its items and open the group!
+      selected.push(...matchingGroup.items, matchingGroup.label);
+      openGroups.push(matchingGroup.label);
+    } else {
+      selected.push(item);
+      const parentGroup = categoryGroups.find((g) =>
+        g.items.some((it) => normalizeCategoryMatch(it) === nItem)
+      );
+      if (parentGroup) {
+        openGroups.push(parentGroup.label);
+      }
+    }
+  });
+
+  return {
+    selected: Array.from(new Set(selected)),
+    openGroups: Array.from(new Set(openGroups)),
+  };
+}
 
 function ProductListContent() {
   const searchParams = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Initialize selectedCategories from URL or sessionStorage
+  const searchQuery = (searchParams.get("search") || searchParams.get("q") || "").trim();
+
+  const clearSearch = () => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.delete("search");
+      params.delete("q");
+      const queryStr = params.toString();
+      const newUrl = queryStr ? `${window.location.pathname}?${queryStr}` : window.location.pathname;
+      window.location.href = newUrl;
+    }
+  };
+
+  // Initialize selectedCategories & openGroups from URL or sessionStorage
   const [selectedCategories, setSelectedCategories] = useState<string[]>(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
+      const isAll = params.get("all") === "true" || params.get("all") === "1" || params.get("category") === "all" || params.get("categories") === "all";
+      if (isAll) {
+        sessionStorage.removeItem("artiory_selected_categories");
+        return [];
+      }
       const catParam = params.get("categories") || params.get("category");
       if (catParam) {
-        return catParam.split(",").map((c) => decodeURIComponent(c.trim())).filter(Boolean);
+        const rawList = catParam.split(",").map((c) => decodeURIComponent(c.trim())).filter(Boolean);
+        const { selected } = expandCategorySelection(rawList);
+        return selected;
       }
       const saved = sessionStorage.getItem("artiory_selected_categories");
       if (saved) {
@@ -83,17 +141,40 @@ function ProductListContent() {
     return [];
   });
 
-  // Sync selectedCategories when URL searchParams change
+  const [openGroups, setOpenGroups] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const isAll = params.get("all") === "true" || params.get("all") === "1" || params.get("category") === "all" || params.get("categories") === "all";
+      if (isAll) return [];
+      const catParam = params.get("categories") || params.get("category");
+      if (catParam) {
+        const rawList = catParam.split(",").map((c) => decodeURIComponent(c.trim())).filter(Boolean);
+        const { openGroups: groups } = expandCategorySelection(rawList);
+        return groups;
+      }
+    }
+    return [];
+  });
+
+  // Sync selectedCategories & openGroups when URL searchParams change
   useEffect(() => {
+    const isAll = searchParams.get("all") === "true" || searchParams.get("all") === "1" || searchParams.get("category") === "all" || searchParams.get("categories") === "all";
+    if (isAll) {
+      setSelectedCategories([]);
+      setOpenGroups([]);
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("artiory_selected_categories");
+      }
+      return;
+    }
+
     const catParam = searchParams.get("categories") || searchParams.get("category");
     if (catParam) {
-      const parsed = catParam.split(",").map((c) => decodeURIComponent(c.trim())).filter(Boolean);
-      setSelectedCategories(parsed);
-      const matchingGroups = categoryGroups.filter(g => 
-        parsed.some(p => normalizeForMatch(p) === normalizeForMatch(g.label) || g.items.some(it => normalizeForMatch(it) === normalizeForMatch(p)))
-      ).map(g => g.label);
-      if (matchingGroups.length > 0) {
-        setOpenGroups(prev => Array.from(new Set([...prev, ...matchingGroups])));
+      const rawList = catParam.split(",").map((c) => decodeURIComponent(c.trim())).filter(Boolean);
+      const { selected, openGroups: groups } = expandCategorySelection(rawList);
+      setSelectedCategories(selected);
+      if (groups.length > 0) {
+        setOpenGroups((prev) => Array.from(new Set([...prev, ...groups])));
       }
     }
   }, [searchParams]);
@@ -110,7 +191,6 @@ function ProductListContent() {
     return "Default";
   });
 
-  const [openGroups, setOpenGroups] = useState<string[]>([]);
   const [showMobileFilter, setShowMobileFilter] = useState(false);
 
   useEffect(() => {
@@ -227,7 +307,7 @@ function ProductListContent() {
                 mrp,
                 oldPrice: mrp || undefined,
                 image,
-                images: imageList.length > 0 ? imageList.map((img: string) => resolveImageSrc(img)) : [image],
+                images: [...new Set((imageList.length > 0 ? imageList.map((img: string) => resolveImageSrc(img)) : [image]).filter(Boolean))],
                 isSale: Boolean(normalized.isSale ?? normalized.onSale ?? (mrp > 0 && price > 0 && price < mrp)),
               };
             })
@@ -328,9 +408,22 @@ function ProductListContent() {
     setOpenGroups((prev) => prev.includes(label) ? prev.filter((g) => g !== label) : [...prev, label]);
 
   const toggleCategory = (cat: string) => {
-    setSelectedCategories((prev) =>
-      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
-    );
+    setSelectedCategories((prev) => {
+      const isRemoving = prev.includes(cat);
+      if (isRemoving) {
+        const parentGroup = categoryGroups.find((g) => g.items.some((it) => it === cat) || g.label === cat);
+        return prev.filter((c) => c !== cat && (parentGroup ? c !== parentGroup.label : true));
+      } else {
+        const next = [...prev, cat];
+        const parentGroup = categoryGroups.find((g) => g.items.some((it) => it === cat));
+        if (parentGroup && parentGroup.items.every((it) => next.includes(it))) {
+          if (!next.includes(parentGroup.label)) {
+            next.push(parentGroup.label);
+          }
+        }
+        return next;
+      }
+    });
   };
 
   const shuffleList = <T,>(arr: T[]): T[] => {
@@ -344,33 +437,51 @@ function ProductListContent() {
 
   const clearFilters = () => {
     setSelectedCategories([]);
+    setOpenGroups([]);
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("artiory_selected_categories");
+      const params = new URLSearchParams(window.location.search);
+      params.delete("categories");
+      params.delete("category");
+      params.delete("all");
+      const queryStr = params.toString();
+      const newUrl = queryStr ? `${window.location.pathname}?${queryStr}` : window.location.pathname;
+      window.history.replaceState(null, "", newUrl);
     }
     setProducts((prev) => shuffleList(prev));
   };
 
   const handleAllProducts = () => {
     setSelectedCategories([]);
+    setOpenGroups([]);
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("artiory_selected_categories");
+      const params = new URLSearchParams(window.location.search);
+      params.delete("categories");
+      params.delete("category");
+      params.delete("all");
+      const queryStr = params.toString();
+      const newUrl = queryStr ? `${window.location.pathname}?${queryStr}` : window.location.pathname;
+      window.history.replaceState(null, "", newUrl);
     }
     setProducts((prev) => shuffleList(prev));
   };
 
-  const normalizeForMatch = (str: string) => {
-    if (!str) return "";
-    let res = str.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (res === "artscraft" || res === "artsandcraft" || res === "artandcraft" || res === "artsandcrafts") {
-      res = "artcraft";
-    }
-    if (res === "drinkwarelunchware" || res === "drinkware" || res === "lunchware") {
-      res = "drinkwarelunchware";
-    }
-    return res;
-  };
+  const normalizeForMatch = normalizeCategoryMatch;
 
   let filteredProducts = products.filter((p) => {
+    // 0. Search Query Filter
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const pName = (p.name || "").toLowerCase();
+      const pCat = (p.category || "").toLowerCase();
+      const pSub = (p.subCategory || "").toLowerCase();
+      const pDesc = (p.shortDescription || p.description || "").toLowerCase();
+      if (!pName.includes(q) && !pCat.includes(q) && !pSub.includes(q) && !pDesc.includes(q)) {
+        return false;
+      }
+    }
+
     // 1. Category Filter
     if (selectedCategories.length === 0) return true;
 
@@ -380,8 +491,9 @@ function ProductListContent() {
 
     return selectedCategories.some((selCatStr) => {
       const selCat = normalizeForMatch(selCatStr);
-      const directCategoryMatch = pCat === selCat || pCat.includes(selCat) || selCat.includes(pCat);
-      const directSubCategoryMatch = pSub === selCat || pSub.includes(selCat) || selCat.includes(pSub);
+      const directCategoryMatch = pCat === selCat || (pCat && selCat && (pCat.includes(selCat) || selCat.includes(pCat)));
+      const directSubCategoryMatch = pSub === selCat || (pSub && selCat && (pSub.includes(selCat) || selCat.includes(pSub)));
+      const nameMatch = selCat.length > 3 && pName.includes(selCat);
 
       const group = categoryGroups.find((g) => normalizeForMatch(g.label) === selCat);
       const groupMatch = group
@@ -395,14 +507,14 @@ function ProductListContent() {
           )
         : false;
 
-      return directCategoryMatch || directSubCategoryMatch || groupMatch;
+      return directCategoryMatch || directSubCategoryMatch || nameMatch || groupMatch;
     });
   });
 
   if (sortOption === "Price: Low to High") filteredProducts = [...filteredProducts].sort((a, b) => a.price - b.price);
   else if (sortOption === "Price: High to Low") filteredProducts = [...filteredProducts].sort((a, b) => b.price - a.price);
 
-  const activeFilterCount = selectedCategories.length;
+  const activeFilterCount = selectedCategories.filter(cat => !categoryGroups.some(g => g.label === cat)).length || selectedCategories.length;
 
   const SidebarFilters = () => (
     <>
@@ -458,11 +570,7 @@ function ProductListContent() {
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={() => {
-                            setSelectedCategories((prev) =>
-                              prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
-                            );
-                          }}
+                          onChange={() => toggleCategory(cat)}
                           className="peer sr-only"
                         />
 
@@ -528,7 +636,14 @@ function ProductListContent() {
             <Link href="/" className="hover:text-[#00b8a2] transition">Home</Link> / All Products
           </p>
           <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
-            <h1 className={`${londrina.className} text-2xl sm:text-3xl font-bold text-[#2e306a]`}>Our Products</h1>
+            <h1 className={`${londrina.className} text-2xl sm:text-3xl font-bold text-[#2e306a]`}>
+              {searchQuery ? `Search Results for "${searchQuery}"` : "Our Products"}
+            </h1>
+            {searchQuery && (
+              <span className="text-xs text-gray-500 font-sans font-medium">
+                Found {filteredProducts.length} {filteredProducts.length === 1 ? "product" : "products"}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -561,19 +676,43 @@ function ProductListContent() {
                   )}
                 </button>
 
-                {/* Active filter chips */}
-                {selectedCategories.map((cat) => (
-                  <span key={cat} className="flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full text-xs font-semibold">
-                    {cat}
+                {/* Active search filter chip */}
+                {searchQuery && (
+                  <span className="flex items-center gap-1.5 px-3 py-1 bg-[#00b8a2]/15 text-[#00b8a2] border border-[#00b8a2]/30 rounded-full text-xs font-bold shadow-2xs">
+                    <span>Search: &ldquo;{searchQuery}&rdquo;</span>
                     <button
                       type="button"
-                      onClick={() => toggleCategory(cat)}
-                      className="hover:text-red-500 ml-0.5"
+                      onClick={clearSearch}
+                      className="hover:text-red-500 ml-0.5 cursor-pointer"
+                      title="Clear search"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </span>
-                ))}
+                )}
+
+                {/* Active filter chips */}
+                {selectedCategories
+                  .filter((cat) => {
+                    const group = categoryGroups.find((g) => g.label === cat);
+                    if (group && group.items.some((it) => selectedCategories.includes(it))) {
+                      return false;
+                    }
+                    return true;
+                  })
+                  .map((cat) => (
+                    <span key={cat} className="flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full text-xs font-semibold">
+                      {cat}
+                      <button
+                        type="button"
+                        onClick={() => toggleCategory(cat)}
+                        className="hover:text-red-500 ml-0.5 cursor-pointer"
+                        title={`Remove ${cat}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
               </div>
 
               <select
@@ -623,7 +762,7 @@ function ProductListContent() {
                       <Link
                         href={`/product/${p.id}`}
                         onClick={handleProductNavigate}
-                        className="relative block aspect-square bg-[#f8fafc] overflow-hidden p-2 sm:p-2.5"
+                        className="relative block aspect-square bg-white overflow-hidden"
                       >
                         {/* Badges */}
                         <div className="absolute top-1.5 left-1.5 z-10 flex flex-col gap-1">
@@ -644,12 +783,27 @@ function ProductListContent() {
                           <Heart className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${isWishlisted ? "fill-[#00b8a2] text-[#00b8a2]" : "text-gray-400"}`} />
                         </button>
 
+                        {/* Primary Image */}
                         <img
-                          src={p.image}
+                          src={p.image || (p.images && p.images[0]) || "/product/placeholder.svg"}
                           alt={p.name}
-                          className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105"
+                          className={`h-full w-full object-cover object-center transition-opacity duration-300 ${
+                            p.images && p.images.length > 1 && p.images[1] && p.images[1] !== (p.image || p.images[0])
+                              ? "group-hover:opacity-0"
+                              : ""
+                          }`}
                           loading="lazy"
                         />
+
+                        {/* Secondary Image on Hover */}
+                        {p.images && p.images.length > 1 && p.images[1] && p.images[1] !== (p.image || p.images[0]) && (
+                          <img
+                            src={p.images[1]}
+                            alt={`${p.name} - view 2`}
+                            className="absolute inset-0 h-full w-full object-cover object-center opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                            loading="lazy"
+                          />
+                        )}
                       </Link>
 
                       {/* Card Body */}

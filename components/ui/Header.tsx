@@ -11,6 +11,7 @@ import { useWishlist } from "@/app/context/whishlist/WishlistContext";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import ProfileModal from "./ProfileModal";
+import SearchModal from "./SearchModal";
 
 type CartItem = {
   id: string;
@@ -32,6 +33,7 @@ const Header: React.FC = () => {
   const menuOpenRef = useRef<boolean>(false);
   const [, forceUpdate] = useReducer((x) => x + 1, 0);
   const [hoverOpen, setHoverOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const hoverTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const handleMouseEnter = () => {
@@ -161,6 +163,21 @@ const Header: React.FC = () => {
 
           {/* Right: Icons */}
           <div className="flex gap-4 md:gap-6 items-center">
+            {/* Search Button (Before Wishlist) */}
+            <button
+              onClick={() => setIsSearchOpen(true)}
+              aria-label="Search products"
+              className="relative p-0.5 hover:opacity-75 transition cursor-pointer flex items-center justify-center"
+            >
+              <Image
+                src="/search-icon.svg"
+                className="w-5.5 md:w-6.5 h-auto cursor-pointer"
+                alt="search"
+                width={25}
+                height={20}
+              />
+            </button>
+
             {/* Wishlist */}
             <Link href="/wish" className="relative">
               <Image
@@ -457,6 +474,11 @@ const Header: React.FC = () => {
       {/* Profile Modal — open when URL contains ?account=true */}
       {searchParams?.has("account") && (
         <ProfileModal onClose={closeAccountModal} />
+      )}
+
+      {/* Search Modal */}
+      {isSearchOpen && (
+        <SearchModal onClose={() => setIsSearchOpen(false)} />
       )}
     </>
   );

@@ -56,6 +56,47 @@ export function getTargetBackendUrl(): string {
   return envUrl.replace(/\/+$/, "");
 }
 
+export function getPublicSiteOrigin(req?: { headers?: { get: (name: string) => string | null }; nextUrl?: { origin?: string } }): string {
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/+$/, "");
+  }
+  if (process.env.SITE_URL) {
+    return process.env.SITE_URL.replace(/\/+$/, "");
+  }
+
+  const forwardedHost = req?.headers?.get?.("x-forwarded-host");
+  const forwardedProto = req?.headers?.get?.("x-forwarded-proto") || "https";
+  if (forwardedHost) {
+    const cleanHost = forwardedHost.split(",")[0].trim();
+    if (!cleanHost.includes("localhost") && !cleanHost.includes("127.0.0.1")) {
+      return `${forwardedProto}://${cleanHost}`;
+    }
+  }
+
+  const host = req?.headers?.get?.("host") || "";
+  if (host && !host.includes("localhost") && !host.includes("127.0.0.1")) {
+    const proto = req?.headers?.get?.("x-forwarded-proto") || "https";
+    return `${proto}://${host}`;
+  }
+
+  const rawOrigin = req?.nextUrl?.origin || "";
+  // Port 3011 is strictly the internal production port behind Nginx reverse proxy
+  if (rawOrigin.includes("3011") || process.env.NODE_ENV === "production") {
+    return "https://artiory.com";
+  }
+
+  if (
+    rawOrigin.includes("localhost:3000") ||
+    rawOrigin.includes("localhost:3001") ||
+    rawOrigin.includes("localhost:3002") ||
+    rawOrigin.includes("127.0.0.1:3000")
+  ) {
+    return rawOrigin;
+  }
+
+  return "https://artiory.com";
+}
+
 export function createBackendToken(user: any): string {
   const userId = user?.id || user?._id || user?.userId || "user_" + Math.random().toString(36).slice(2);
   const email = user?.email || "";
