@@ -53,7 +53,30 @@ function StatusContent() {
   React.useEffect(() => {
     if (isSuccess) {
       dispatch({ type: "CLEAR_CART" });
-      window.location.href = `/profile?tab=orders&highlight=${orderId}`;
+
+      if (typeof window !== "undefined" && orderId && orderId !== "N/A") {
+        try {
+          const existing = JSON.parse(localStorage.getItem("artiory_guest_orders") || "[]");
+          const updated = [orderId, ...existing.filter((id: string) => id !== orderId)].slice(0, 10);
+          localStorage.setItem("artiory_guest_orders", JSON.stringify(updated));
+          localStorage.setItem("artiory_recent_order", orderId);
+        } catch (e) {
+          console.error("Local order save notice:", e);
+        }
+      }
+
+      const timer = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            window.location.href = `/orders/${orderId}`;
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(timer);
     } else if (orderId !== "N/A") {
       checkLiveStatus();
     }
@@ -71,7 +94,7 @@ function StatusContent() {
             Thank you! Your payment has been verified and your order is booked.
           </p>
           <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-xs text-emerald-800 font-medium">
-            Redirecting to your orders profile in <b>{countdown}s</b>...
+            Redirecting to your order receipt & live tracking in <b>{countdown}s</b>...
           </div>
         </>
       )}
@@ -121,17 +144,25 @@ function StatusContent() {
         {isSuccess ? (
           <>
             <Link
-              href={`/profile?tab=orders&highlight=${orderId}`}
-              className="w-full bg-[#1e1e4d] hover:bg-[#2e306a] text-white font-bold rounded-xl py-3.5 transition text-center shadow-md flex items-center justify-center gap-2 text-sm"
+              href={`/orders/${orderId}`}
+              className="w-full bg-[#1e1e4d] hover:bg-[#2e306a] text-white font-bold rounded-xl py-3.5 transition text-center shadow-md flex items-center justify-center gap-2 text-sm cursor-pointer"
             >
-              🛍️ View Order in Profile →
+              📦 View Order Details & Track Shipment →
             </Link>
-            <Link
-              href="/listing"
-              className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl py-3 transition text-center text-xs"
-            >
-              Continue Shopping
-            </Link>
+            <div className="flex items-center justify-between gap-2">
+              <Link
+                href="/listing"
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl py-2.5 transition text-center text-xs"
+              >
+                Continue Shopping
+              </Link>
+              <Link
+                href="/track-order"
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl py-2.5 transition text-center text-xs"
+              >
+                Track Order Page
+              </Link>
+            </div>
           </>
         ) : (
           <>

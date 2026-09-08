@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useCart } from "@/app/context/cart/Cartcontext";
 import Link from "next/link";
 import { Londrina_Solid } from "next/font/google";
-import { useSession } from "next-auth/react";
+import { useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 const londrina = Londrina_Solid({
@@ -25,12 +25,6 @@ export default function CheckoutPage() {
   const { cartItems, getCartTotal } = useCart();
   const { data: session, status } = useSession();
   const router = useRouter();
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.replace("/auth/signin?callbackUrl=/checkout");
-    }
-  }, [status, router]);
 
   const [form, setForm] = useState({
     firstName: "",
@@ -87,7 +81,7 @@ export default function CheckoutPage() {
           pincode: cleaned,
           totalPrice: getCartTotal(),
           orderItems,
-          payment_method: form.paymentMethod === "cod" ? "cod" : "prepaid"
+          payment_method: "prepaid"
         }),
       });
       const chargeJson = await chargeRes.json();
@@ -181,7 +175,8 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (!form.lastName.trim() || !form.home.trim() || !form.address.trim() || !form.city.trim() || !form.state.trim() || !form.email.trim() || !form.phone.trim() || !form.zip.trim()) {
+    const fullName = `${form.firstName} ${form.lastName}`.trim();
+    if (!fullName || !form.home.trim() || !form.address.trim() || !form.city.trim() || !form.state.trim() || !form.email.trim() || !form.phone.trim() || !form.zip.trim()) {
       alert("Please fill in all required delivery information marked with * (Name, Flat/House No, Street, City, State, 6-digit Pincode, Mobile & Email).");
       return;
     }
@@ -279,54 +274,61 @@ export default function CheckoutPage() {
 
       const orderId = orderJson._id;
 
-      if (form.paymentMethod === "sabpaisa") {
-        const currentOrigin = typeof window !== "undefined" && window.location.origin && !window.location.origin.includes("3011")
-          ? window.location.origin
-          : "https://artiory.com";
-        const paymentRes = await fetch("/api/payment/sabpaisa/initiate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderId, returnUrl: currentOrigin }),
-        });
-
-        const paymentJson = await paymentRes.json();
-        if (!paymentRes.ok) {
-          throw new Error(paymentJson.message || "Failed to initialize payment gateway");
+      if (typeof window !== "undefined" && orderId) {
+        try {
+          const existing = JSON.parse(localStorage.getItem("artiory_guest_orders") || "[]");
+          const updated = [orderId, ...existing.filter((id: string) => id !== orderId)].slice(0, 10);
+          localStorage.setItem("artiory_guest_orders", JSON.stringify(updated));
+          localStorage.setItem("artiory_recent_order", orderId);
+        } catch (e) {
+          console.error("Local order save notice:", e);
         }
-
-        if (paymentJson.checkoutUrl) {
-          window.location.href = paymentJson.checkoutUrl;
-          return;
-        }
-
-        const { encData, clientCode, sabpaisaUrl } = paymentJson;
-
-        // Dynamically build and submit redirection form
-        const formEl = document.createElement("form");
-        formEl.method = "POST";
-        formEl.action = sabpaisaUrl;
-
-        const addField = (name: string, value: string) => {
-          if (!value) return;
-          const input = document.createElement("input");
-          input.type = "hidden";
-          input.name = name;
-          input.value = value;
-          formEl.appendChild(input);
-        };
-
-        addField("clientCode", clientCode);
-        addField("clientcode", clientCode);
-        addField("client_code", clientCode);
-        addField("encData", encData);
-        addField("encdata", encData);
-
-        document.body.appendChild(formEl);
-        formEl.submit();
-      } else {
-        alert("Order placed successfully! (Cash on Delivery)");
-        window.location.href = `/checkout/status?status=paid&orderId=${orderId}`;
       }
+
+      const currentOrigin = typeof window !== "undefined" && window.location.origin && !window.location.origin.includes("3011")
+        ? window.location.origin
+        : "https://artiory.com";
+
+      const paymentRes = await fetch("/api/payment/sabpaisa/initiate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId, returnUrl: currentOrigin }),
+      });
+
+      const paymentJson = await paymentRes.json();
+      if (!paymentRes.ok) {
+        throw new Error(paymentJson.message || "Failed to initialize payment gateway");
+      }
+
+      if (paymentJson.checkoutUrl) {
+        window.location.href = paymentJson.checkoutUrl;
+        return;
+      }
+
+      const { encData, clientCode, sabpaisaUrl } = paymentJson;
+
+      // Dynamically build and submit redirection form
+      const formEl = document.createElement("form");
+      formEl.method = "POST";
+      formEl.action = sabpaisaUrl;
+
+      const addField = (name: string, value: string) => {
+        if (!value) return;
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = name;
+        input.value = value;
+        formEl.appendChild(input);
+      };
+
+      addField("clientCode", clientCode);
+      addField("clientcode", clientCode);
+      addField("client_code", clientCode);
+      addField("encData", encData);
+      addField("encdata", encData);
+
+      document.body.appendChild(formEl);
+      formEl.submit();
     } catch (err: any) {
       console.error("Place Order Error:", err);
       alert(err.message || "Something went wrong while placing your order. Please try again.");
@@ -400,11 +402,11 @@ export default function CheckoutPage() {
     }
   };
 
-  if (status === "loading" || status === "unauthenticated") {
+  if (status === "loading") {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 bg-white">
         <div className="w-12 h-12 border-4 border-[#00ba82] border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-gray-500 font-medium text-sm">Verifying account access...</p>
+        <p className="text-gray-500 font-medium text-sm">Loading checkout...</p>
       </div>
     );
   }
@@ -429,6 +431,27 @@ export default function CheckoutPage() {
           {/* Delivery Info */}
           <div className="border border-gray-300 rounded-xl p-8 shadow-md">
             <h2 className={`${londrina.className} text-2xl font-semibold mb-6`}>Delivery Information</h2>
+
+            {!session?.user && (
+              <div className="mb-6 p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[#2e306a]">
+                <div className="text-xs sm:text-sm">
+                  <span className="font-bold text-[#00ba82]">⚡ Direct Guest Checkout:</span> Enter your delivery address below to place order directly.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => signIn("google", { callbackUrl: "/checkout" })}
+                  className="shrink-0 bg-[#2e306a] hover:bg-[#1d1e44] text-white text-xs font-bold px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-2"
+                >
+                  <Image
+                    width={14}
+                    height={14}
+                    src="https://cdn-icons-png.flaticon.com/128/281/281764.png"
+                    alt="Google"
+                  />
+                  <span>Sign in with Google</span>
+                </button>
+              </div>
+            )}
             
             {savedAddresses.length > 0 && (
               <div className="mb-6 bg-gray-50 border border-dashed border-gray-300 rounded-xl p-4">

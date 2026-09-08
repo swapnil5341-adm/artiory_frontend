@@ -147,8 +147,8 @@ const Header: React.FC = () => {
           {/* Desktop Menu */}
           <nav className={`${londrina.className} hidden md:block mt-1`}>
             <ul className="flex gap-10 font-bold justify-center">
-              {["HOME", "ABOUT US", "PRODUCTS", "CONTACT US"].map((text, i) => {
-                const hrefs = ["/", "/about", "/listing", "/contact"];
+              {["HOME", "ABOUT US", "PRODUCTS", "TRACK ORDER", "CONTACT US"].map((text, i) => {
+                const hrefs = ["/", "/about", "/listing", "/track-order", "/contact"];
                 return (
                   <li
                     key={text}
@@ -445,6 +445,12 @@ const Header: React.FC = () => {
               <li onClick={closeMenu}>
                 <Link href="/about" className="hover:text-[#00b8a2] transition flex items-center justify-between">
                   <span>ABOUT US</span>
+                  <span className="text-sm opacity-40">→</span>
+                </Link>
+              </li>
+              <li onClick={closeMenu}>
+                <Link href="/track-order" className="hover:text-[#00b8a2] transition flex items-center justify-between">
+                  <span>TRACK ORDER</span>
                   <span className="text-sm opacity-40">→</span>
                 </Link>
               </li>

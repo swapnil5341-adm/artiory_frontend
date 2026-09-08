@@ -4,6 +4,7 @@ import React, { useEffect, useState, use } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   Package,
   MapPin,
@@ -82,6 +83,7 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
   const resolvedParams = use(params);
   const orderId = resolvedParams.id;
   const router = useRouter();
+  const { data: session } = useSession();
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -176,10 +178,10 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
           </p>
           <div className="pt-2 flex flex-col gap-2.5">
             <Link
-              href="/profile?tab=orders"
+              href={session?.user ? "/profile?tab=orders" : "/track-order"}
               className="w-full bg-slate-950 hover:bg-black text-white font-bold py-3 rounded-xl text-xs transition"
             >
-              ← Back to My Orders
+              {session?.user ? "← Back to My Orders" : "← Track Another Order"}
             </Link>
             <Link
               href="/listing"
@@ -220,11 +222,11 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
         {/* Navigation & Breadcrumbs */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <Link
-            href="/profile?tab=orders"
+            href={session?.user ? "/profile?tab=orders" : "/track-order"}
             className="inline-flex items-center gap-2 text-xs font-black text-slate-900 bg-white border-2 border-slate-300 hover:bg-slate-50 px-4 py-2 rounded-xl transition shadow-xs"
           >
             <ArrowLeft size={14} />
-            <span>Back to All Orders</span>
+            <span>{session?.user ? "Back to All Orders" : "Track Another Order"}</span>
           </Link>
           <div className="text-xs text-slate-500 font-medium">
             <span>Orders</span> &nbsp;/&nbsp; <b className="text-slate-950 font-mono">#ORD-{shortId}</b>

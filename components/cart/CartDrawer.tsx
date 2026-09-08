@@ -8,6 +8,7 @@ import Image from "next/image";
 import { Londrina_Solid } from "next/font/google";
 import { useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import CheckoutAuthModal from "@/components/auth/CheckoutAuthModal";
 
 const londrina = Londrina_Solid({
   weight: ["100", "300", "400", "900"],
@@ -395,75 +396,19 @@ export default function CartPage() {
         </>
       )}
 
-      {/* Auth Modal for Guest Proceed to Checkout */}
-      {showAuthModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div
-            className="fixed inset-0"
-            onClick={() => !isSigningIn && setShowAuthModal(false)}
-          />
-          <div className="relative bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 sm:p-8 border border-gray-100 z-10 text-center transform transition-all">
-            {/* Close button */}
-            <button
-              onClick={() => !isSigningIn && setShowAuthModal(false)}
-              className="absolute top-4 right-4 p-2 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition cursor-pointer"
-              aria-label="Close"
-            >
-              <X size={20} />
-            </button>
-
-            {/* Brand Logo */}
-            <div className="mx-auto mb-4 flex items-center justify-center">
-              <Image
-                width={100}
-                height={50}
-                src="/Artiory-Logo.svg"
-                alt="Artiory Logo"
-                className="mx-auto h-auto w-24"
-              />
-            </div>
-
-            <h3 className={`${londrina.className} text-3xl text-[#2e306a] mb-2 font-bold`}>
-              Login or Register to Continue
-            </h3>
-            <p className="text-gray-600 text-sm mb-6 leading-relaxed">
-              Sign in with your Google account to proceed to checkout, deliver to your address, and track your orders.
-            </p>
-
-            {/* Google Sign-In Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setIsSigningIn(true);
-                signIn("google", { callbackUrl: "/checkout" });
-              }}
-              disabled={isSigningIn}
-              className="w-full flex items-center justify-center gap-3 border border-gray-300 rounded-2xl py-3.5 px-4 mb-4 shadow-sm hover:shadow-md hover:border-gray-400 transition bg-white cursor-pointer active:scale-[0.98] disabled:opacity-60"
-            >
-              <Image
-                width={22}
-                height={22}
-                src="https://cdn-icons-png.flaticon.com/128/281/281764.png"
-                alt="Google Icon"
-              />
-              <span className="text-[#2e306a] font-bold text-base">
-                {isSigningIn ? "Connecting Google..." : "Continue with Google"}
-              </span>
-            </button>
-
-            {/* Email login option */}
-            <div className="pt-2 text-xs text-gray-500">
-              Prefer signing in with email?{" "}
-              <Link
-                href="/auth/signin?callbackUrl=/checkout"
-                className="text-[#00ba82] font-semibold hover:underline"
-              >
-                Sign in here
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Auth / Guest Checkout Options Modal */}
+      <CheckoutAuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onContinueAsGuest={() => {
+          setShowAuthModal(false);
+          router.push("/checkout");
+        }}
+        onSuccessLogin={() => {
+          setShowAuthModal(false);
+          router.push("/checkout");
+        }}
+      />
     </div>
   );
 }

@@ -8,15 +8,15 @@ const API_BASE_URL = getTargetBackendUrl();
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: "Unauthorized. Please sign in with Google to place an order." },
-        { status: 401 }
-      );
-    }
-
     const body = await req.json();
-    const token = createBackendToken(session.user);
+
+    const userObj = session?.user || {
+      id: "guest_" + (body.shippingAddress?.phone || Date.now().toString().slice(-6)),
+      email: body.shippingAddress?.email || `${body.shippingAddress?.phone || "guest"}@artiory.com`,
+      name: body.shippingAddress?.name || "Customer",
+    };
+
+    const token = createBackendToken(userObj);
 
     const res = await fetch(`${API_BASE_URL}/api/orders`, {
       method: "POST",
