@@ -1,79 +1,122 @@
 import { NextRequest, NextResponse } from "next/server";
-
 import { getTargetBackendUrl, getPublicSiteOrigin } from "@/lib/auth";
 
 const API_BASE_URL = getTargetBackendUrl();
 
-export async function GET(req: NextRequest) {
+async function handleCallback(req: NextRequest, isPost: boolean) {
+  const origin = getPublicSiteOrigin(req);
   try {
-    const searchParams = req.nextUrl.searchParams;
-    const merchantTxnId = searchParams.get("merchant_txn_id") || searchParams.get("merchantTxnId") || searchParams.get("clientTxnId") || "";
-    const transactionId = searchParams.get("transaction_id") || searchParams.get("sabpaisaTxnId") || searchParams.get("txnId") || "N/A";
-    const status = searchParams.get("status") || searchParams.get("statusCode") || "PENDING";
-    const rawAmount = searchParams.get("paid_amount") || searchParams.get("amount") || "0.00";
+    const payload: Record<string, string> = {};
 
-    const orderId = merchantTxnId.split("-")[0] || "";
-    const isSuccess = status.toUpperCase() === "SUCCESS" || status.toUpperCase() === "TXN_SUCCESS" || status.toUpperCase() === "PAID";
-    const statusLabel = isSuccess ? "paid" : status.toLowerCase() === "failed" ? "failed" : "pending";
+    // 1. Collect query params
+    req.nextUrl.searchParams.forEach((value, key) => {
+      payload[key] = value;
+    });
 
-    // Format amount
-    let displayAmount = rawAmount;
-    if (Number(rawAmount) > 1000 && !rawAmount.includes(".")) {
-      displayAmount = (Number(rawAmount) / 100).toFixed(2);
+    // 2. If POST, collect body params (support urlencoded, form-data, json)
+    if (isPost) {
+      const contentType = req.headers.get("content-type") || "";
+      if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
+        try {
+          const formData = await req.formData();
+          formData.forEach((value, key) => {
+            payload[key] = value.toString();
+          });
+        } catch (e) {
+          console.error("Error reading formData in SabPaisa callback:", e);
+        }
+      } else if (contentType.includes("application/json")) {
+        try {
+          const json = await req.json();
+          if (json && typeof json === "object") {
+            Object.assign(payload, json);
+          }
+        } catch (e) {
+          console.error("Error reading JSON body in SabPaisa callback:", e);
+        }
+      } else {
+        // Fallback: try reading raw text and parsing as urlencoded
+        try {
+          const rawText = await req.text();
+          if (rawText && rawText.includes("=")) {
+            const parsed = new URLSearchParams(rawText);
+            parsed.forEach((value, key) => {
+              payload[key] = value;
+            });
+          }
+        } catch {}
+      }
     }
 
-    // Inform backend in the background
-    fetch(`${API_BASE_URL}/api/payment/sabpaisa/callback?${searchParams.toString()}`, {
-      method: "GET",
-    }).catch((e) => console.error("Async backend sync error:", e));
+    console.log("SabPaisa Callback received in Next.js:", {
+      method: req.method,
+      hasEncResponse: Boolean(payload.encResponse || payload.encData),
+      clientTxnId: payload.clientTxnId || payload.merchantTxnId || payload.merchant_txn_id,
+      status: payload.status || payload.statusCode,
+    });
 
-    const origin = getPublicSiteOrigin(req);
+    // 3. Forward full payload directly to backend for AES decryption & order update
+    let backendResult: any = null;
+    try {
+      const backendRes = await fetch(`${API_BASE_URL}/api/payment/sabpaisa/callback`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "x-forwarded-by": "nextjs",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (backendRes.ok) {
+        backendResult = await backendRes.json().catch(() => null);
+        console.log("Backend sync result:", backendResult);
+      } else {
+        const text = await backendRes.text();
+        console.warn("Backend callback returned status", backendRes.status, text.slice(0, 300));
+      }
+    } catch (backendErr) {
+      console.error("Failed to forward callback to backend:", backendErr);
+    }
+
+    // 4. Resolve Order ID and final status
+    const resolvedOrderId =
+      backendResult?.orderId ||
+      (payload.clientTxnId || payload.merchantTxnId || payload.merchant_txn_id || "").split("-")[0] ||
+      "";
+
+    const rawStatus = (
+      backendResult?.status ||
+      payload.status ||
+      payload.statusCode ||
+      payload.status_code ||
+      "PENDING"
+    ).toUpperCase().trim();
+
+    const isSuccess =
+      backendResult?.isSuccess === true ||
+      rawStatus === "PAID" ||
+      rawStatus === "SUCCESS" ||
+      rawStatus === "TXN_SUCCESS" ||
+      rawStatus === "0000" ||
+      rawStatus === "0200" ||
+      rawStatus === "OK";
+
     if (isSuccess) {
-      return NextResponse.redirect(`${origin}/profile?tab=orders&highlight=${orderId}`);
+      return NextResponse.redirect(`${origin}/profile?tab=orders&highlight=${resolvedOrderId}`);
     } else {
-      return NextResponse.redirect(`${origin}/checkout?error=PaymentFailed&orderId=${orderId}`);
+      return NextResponse.redirect(`${origin}/checkout?error=PaymentFailed&orderId=${resolvedOrderId}`);
     }
   } catch (error) {
-    console.error("Sabpaisa callback GET handler error:", error);
-    const origin = getPublicSiteOrigin(req);
+    console.error("SabPaisa callback general error:", error);
     return NextResponse.redirect(`${origin}/profile?tab=orders`);
   }
 }
 
+export async function GET(req: NextRequest) {
+  return handleCallback(req, false);
+}
+
 export async function POST(req: NextRequest) {
-  try {
-    const contentType = req.headers.get("content-type") || "";
-    let merchantTxnId = "";
-    let transactionId = "N/A";
-    let status = "PENDING";
-    let rawAmount = "0.00";
-
-    if (contentType.includes("application/x-www-form-urlencoded")) {
-      const formData = await req.formData();
-      merchantTxnId = formData.get("merchant_txn_id")?.toString() || formData.get("merchantTxnId")?.toString() || formData.get("clientTxnId")?.toString() || "";
-      transactionId = formData.get("transaction_id")?.toString() || formData.get("sabpaisaTxnId")?.toString() || formData.get("txnId")?.toString() || "N/A";
-      status = formData.get("status")?.toString() || formData.get("statusCode")?.toString() || "PENDING";
-      rawAmount = formData.get("paid_amount")?.toString() || formData.get("amount")?.toString() || "0.00";
-    } else {
-      const json = await req.json().catch(() => ({}));
-      merchantTxnId = json.merchant_txn_id || json.merchantTxnId || json.clientTxnId || "";
-      transactionId = json.transaction_id || json.sabpaisaTxnId || json.txnId || "N/A";
-      status = json.status || json.statusCode || "PENDING";
-      rawAmount = json.paid_amount || json.amount || "0.00";
-    }
-
-    const orderId = merchantTxnId.split("-")[0] || "";
-    const isSuccess = status.toUpperCase() === "SUCCESS" || status.toUpperCase() === "TXN_SUCCESS" || status.toUpperCase() === "PAID";
-
-    const origin = getPublicSiteOrigin(req);
-    if (isSuccess) {
-      return NextResponse.redirect(`${origin}/profile?tab=orders&highlight=${orderId}`);
-    } else {
-      return NextResponse.redirect(`${origin}/checkout?error=PaymentFailed&orderId=${orderId}`);
-    }
-  } catch (error) {
-    console.error("Sabpaisa callback POST handler error:", error);
-    const origin = getPublicSiteOrigin(req);
-    return NextResponse.redirect(`${origin}/profile?tab=orders`);
-  }
+  return handleCallback(req, true);
 }
