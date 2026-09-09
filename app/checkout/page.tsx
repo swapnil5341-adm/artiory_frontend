@@ -68,9 +68,7 @@ export default function CheckoutPage() {
         qty: item.quantity,
       }));
 
-      const backendBase = (process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes("api.artiory.com"))
-        ? process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, "")
-        : "https://artiory-backend.vercel.app";
+      const backendBase = (process.env.NEXT_PUBLIC_API_URL || "https://api.artiory.com").replace(/\/+$/, "");
       const chargeRes = await fetch(`${backendBase}/api/logistics/shipping-charge`, {
         method: "POST",
         headers: {
