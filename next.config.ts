@@ -2,12 +2,14 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
-  experimental: {
-    reactCompiler: true,
-  },
-
   outputFileTracingRoot: path.resolve(__dirname),
 
+
+  // Prevent memory buffer buildup during development
+  onDemandEntries: {
+    maxInactiveAge: 15 * 1000,
+    pagesBufferLength: 2,
+  },
 
   images: {
     remotePatterns: [

@@ -103,6 +103,9 @@ async function handleCallback(req: NextRequest, isPost: boolean) {
       rawStatus === "OK";
 
     if (isSuccess) {
+      if (backendResult?.isGuest) {
+        return NextResponse.redirect(`${origin}/track-order?orderId=${resolvedOrderId}&payment=success`);
+      }
       return NextResponse.redirect(`${origin}/profile?tab=orders&highlight=${resolvedOrderId}`);
     } else {
       return NextResponse.redirect(`${origin}/checkout?error=PaymentFailed&orderId=${resolvedOrderId}`);

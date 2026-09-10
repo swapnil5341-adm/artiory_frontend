@@ -7,8 +7,11 @@ export function cn(...inputs: ClassValue[]) {
 
 export function getApiBaseUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_BASE_URL || "";
+  if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
+    return "http://localhost:5000";
+  }
   if (!envUrl || envUrl.includes("undefined")) {
-    return "https://api.artiory.com";
+    return "http://localhost:5000";
   }
   return envUrl.replace(/\/+$/, "");
 }

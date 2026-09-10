@@ -262,6 +262,7 @@ export default function CheckoutPage() {
           discountAmount,
           shippingCharge: shipping,
           couponCode: appliedCoupon?.code || "",
+          isGuest: !session?.user,
         }),
       });
 
@@ -305,7 +306,7 @@ export default function CheckoutPage() {
 
       const { encData, clientCode, sabpaisaUrl } = paymentJson;
 
-      // Dynamically build and submit redirection form
+      // Standard SabPaisa Redirection Form
       const formEl = document.createElement("form");
       formEl.method = "POST";
       formEl.action = sabpaisaUrl;
@@ -320,10 +321,7 @@ export default function CheckoutPage() {
       };
 
       addField("clientCode", clientCode);
-      addField("clientcode", clientCode);
-      addField("client_code", clientCode);
       addField("encData", encData);
-      addField("encdata", encData);
 
       document.body.appendChild(formEl);
       formEl.submit();

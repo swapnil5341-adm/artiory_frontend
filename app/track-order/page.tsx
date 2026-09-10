@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Londrina_Solid } from "next/font/google";
 import {
   Search,
@@ -33,6 +33,7 @@ interface OrderSummary {
   shipmentStatus?: string;
   courierName?: string;
   awbNumber?: string;
+  logisticsOrderId?: string;
   createdAt: string;
   shippingAddress?: {
     name?: string;
@@ -48,9 +49,13 @@ interface OrderSummary {
   }>;
 }
 
-export default function TrackOrderPage() {
+function TrackOrderContent() {
   const router = useRouter();
-  const [query, setQuery] = useState("");
+  const searchParams = useSearchParams();
+  const urlOrderId = searchParams.get("orderId") || searchParams.get("id") || "";
+  const isPaymentSuccess = searchParams.get("payment") === "success";
+
+  const [query, setQuery] = useState(urlOrderId);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<OrderSummary[] | null>(null);
@@ -69,6 +74,24 @@ export default function TrackOrderPage() {
       }
     } catch {}
   }, []);
+
+  // Automatically track if orderId was passed in URL (e.g. from payment callback)
+  useEffect(() => {
+    if (urlOrderId) {
+      setQuery(urlOrderId);
+      handleTrack(urlOrderId);
+
+      try {
+        const stored = localStorage.getItem("artiory_guest_orders");
+        const existing = stored ? JSON.parse(stored) : [];
+        const updated = [urlOrderId, ...existing.filter((id: string) => id !== urlOrderId)].slice(0, 10);
+        localStorage.setItem("artiory_guest_orders", JSON.stringify(updated));
+        setRecentOrderIds(updated.slice(0, 5));
+      } catch (e) {
+        console.error("Local order save notice:", e);
+      }
+    }
+  }, [urlOrderId]);
 
   const handleTrack = async (searchQuery?: string) => {
     const q = (searchQuery || query).trim();
@@ -135,6 +158,23 @@ export default function TrackOrderPage() {
           </p>
         </div>
 
+        {/* Payment Success Banner */}
+        {isPaymentSuccess && (
+          <div className="bg-emerald-50 border-2 border-emerald-300 rounded-3xl p-6 text-emerald-900 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-4 animate-fadeIn">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shrink-0 text-2xl font-bold shadow-xs">
+              ✓
+            </div>
+            <div className="space-y-1 flex-1">
+              <h3 className={`${londrina.className} text-2xl font-bold text-emerald-800 tracking-wide`}>
+                Order Placed Successfully!
+              </h3>
+              <p className="text-xs sm:text-sm text-emerald-700 leading-relaxed">
+                Thank you! Your payment is confirmed and your order has been registered. You can track live delivery milestones and courier updates below using your Order ID.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Search Input Box */}
         <div className="bg-white rounded-3xl p-6 sm:p-8 border-2 border-slate-200 shadow-md">
           <form
@@ -153,7 +193,7 @@ export default function TrackOrderPage() {
                 <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="e.g. 6a9aa66... or 9820136133 or name@email.com"
+                  placeholder="e.g. #35468, 9820136133, ORD-506E4938, or email"
                   value={query}
                   onChange={(e) => {
                     setQuery(e.target.value);
@@ -236,14 +276,19 @@ export default function TrackOrderPage() {
                     className="bg-white rounded-3xl p-6 border-2 border-slate-200 shadow-sm hover:shadow-md transition space-y-4"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
                         <span className="font-mono font-black text-lg text-slate-900">
                           #ORD-{shortId}
                         </span>
+                        {ord.logisticsOrderId && ord.logisticsOrderId !== "N/A" && (
+                          <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg font-mono font-bold border border-slate-200">
+                            iThink ID: #{ord.logisticsOrderId}
+                          </span>
+                        )}
                         <button
                           onClick={(e) => handleCopyId(ord._id, e)}
                           title="Copy Full ID"
-                          className="p-1 text-slate-400 hover:text-slate-700 rounded transition"
+                          className="p-1 text-slate-400 hover:text-slate-700 rounded transition cursor-pointer"
                         >
                           {copiedId === ord._id ? (
                             <Check size={14} className="text-emerald-600" />
@@ -350,5 +395,22 @@ export default function TrackOrderPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function TrackOrderPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-8">
+          <div className="text-center space-y-3">
+            <div className="w-10 h-10 border-4 border-[#2e306a] border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Loading Order Tracker...</p>
+          </div>
+        </div>
+      }
+    >
+      <TrackOrderContent />
+    </Suspense>
   );
 }

@@ -49,9 +49,19 @@ export function signJwtHS256(payload: object, secret: string, expiresInMinutes =
 }
 
 export function getTargetBackendUrl(): string {
-  const envUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_BASE_URL || "";
+  if (process.env.API_BASE_URL) {
+    return process.env.API_BASE_URL.replace(/\/+$/, "");
+  }
+  const envUrl = process.env.NEXT_PUBLIC_API_URL || "";
+  if (
+    envUrl.includes("localhost") ||
+    process.env.NEXTAUTH_URL?.includes("localhost") ||
+    (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"))
+  ) {
+    return "http://localhost:5000";
+  }
   if (!envUrl || envUrl.includes("undefined")) {
-    return "https://api.artiory.com";
+    return "http://localhost:5000";
   }
   return envUrl.replace(/\/+$/, "");
 }
