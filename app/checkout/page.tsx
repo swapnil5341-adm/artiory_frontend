@@ -306,6 +306,10 @@ export default function CheckoutPage() {
 
       const { encData, clientCode, sabpaisaUrl } = paymentJson;
 
+      if (!sabpaisaUrl || !clientCode || !encData) {
+        throw new Error(paymentJson.message || "Failed to initialize payment: No checkout URL received from gateway.");
+      }
+
       // Standard SabPaisa Redirection Form
       const formEl = document.createElement("form");
       formEl.method = "POST";

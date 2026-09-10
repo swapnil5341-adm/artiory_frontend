@@ -3,10 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import { createBackendToken, getTargetBackendUrl } from "@/lib/auth";
 
-const API_BASE_URL = getTargetBackendUrl();
-
 export async function POST(req: NextRequest) {
   try {
+    const API_BASE_URL = getTargetBackendUrl(req);
     const session = await getServerSession(authOptions);
     const body = await req.json();
 
@@ -43,6 +42,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
+    const API_BASE_URL = getTargetBackendUrl(req);
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

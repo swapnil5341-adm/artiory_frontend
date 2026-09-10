@@ -3,10 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import { createBackendToken, getTargetBackendUrl } from "@/lib/auth";
 
-const API_BASE_URL = getTargetBackendUrl();
-
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const API_BASE_URL = getTargetBackendUrl(req);
     const { id } = await context.params;
     const session = await getServerSession(authOptions);
     const token = createBackendToken(session?.user || { id: "guest", email: "guest@artiory.com" });

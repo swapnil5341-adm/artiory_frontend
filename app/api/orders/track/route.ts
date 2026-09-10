@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTargetBackendUrl } from "@/lib/auth";
 
-const API_BASE_URL = getTargetBackendUrl();
-
 export async function POST(req: NextRequest) {
   try {
+    const API_BASE_URL = getTargetBackendUrl(req);
     const body = await req.json();
     const query = body?.query;
 

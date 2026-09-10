@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTargetBackendUrl, getPublicSiteOrigin } from "@/lib/auth";
 
-const API_BASE_URL = getTargetBackendUrl();
-
 async function handleCallback(req: NextRequest, isPost: boolean) {
   const origin = getPublicSiteOrigin(req);
+  const API_BASE_URL = getTargetBackendUrl(req);
   try {
     const payload: Record<string, string> = {};
 

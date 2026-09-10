@@ -48,15 +48,41 @@ export function signJwtHS256(payload: object, secret: string, expiresInMinutes =
   return `${signatureInput}.${encodedSignature}`;
 }
 
-export function getTargetBackendUrl(): string {
+export function getTargetBackendUrl(req?: { headers?: { get: (name: string) => string | null }; nextUrl?: { origin?: string; host?: string } }): string {
   if (process.env.API_BASE_URL) {
     return process.env.API_BASE_URL.replace(/\/+$/, "");
   }
+
+  // 1. Detect if incoming request originated from or targets localhost
+  const host = req?.headers?.get?.("host") || req?.nextUrl?.host || "";
+  const forwardedHost = req?.headers?.get?.("x-forwarded-host") || "";
+  const origin = req?.headers?.get?.("origin") || req?.nextUrl?.origin || "";
+  const referer = req?.headers?.get?.("referer") || "";
+
+  const isLocalRequest =
+    host.includes("localhost") || host.includes("127.0.0.1") ||
+    forwardedHost.includes("localhost") || forwardedHost.includes("127.0.0.1") ||
+    origin.includes("localhost") || origin.includes("127.0.0.1") ||
+    referer.includes("localhost") || referer.includes("127.0.0.1");
+
+  if (isLocalRequest) {
+    return "http://localhost:5000";
+  }
+
+  // 2. Client-side browser check
+  if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
+    return "http://localhost:5000";
+  }
+
+  // 3. If running locally via dev server
+  if (process.env.NODE_ENV === "development" || process.env.npm_lifecycle_event === "dev") {
+    return "http://localhost:5000";
+  }
+
   const envUrl = process.env.NEXT_PUBLIC_API_URL || "";
   if (
     envUrl.includes("localhost") ||
-    process.env.NEXTAUTH_URL?.includes("localhost") ||
-    (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"))
+    process.env.NEXTAUTH_URL?.includes("localhost")
   ) {
     return "http://localhost:5000";
   }
@@ -67,34 +93,22 @@ export function getTargetBackendUrl(): string {
 }
 
 export function getPublicSiteOrigin(req?: { headers?: { get: (name: string) => string | null }; nextUrl?: { origin?: string } }): string {
-  if (process.env.NEXT_PUBLIC_SITE_URL) {
-    return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/+$/, "");
-  }
-  if (process.env.SITE_URL) {
-    return process.env.SITE_URL.replace(/\/+$/, "");
-  }
-
+  // If request headers indicate localhost, prioritize local port so callbacks & redirects return to local browser
   const forwardedHost = req?.headers?.get?.("x-forwarded-host");
-  const forwardedProto = req?.headers?.get?.("x-forwarded-proto") || "https";
+  const forwardedProto = req?.headers?.get?.("x-forwarded-proto") || "http";
   if (forwardedHost) {
     const cleanHost = forwardedHost.split(",")[0].trim();
-    if (!cleanHost.includes("localhost") && !cleanHost.includes("127.0.0.1")) {
-      return `${forwardedProto}://${cleanHost}`;
+    if (cleanHost.includes("localhost") || cleanHost.includes("127.0.0.1")) {
+      return `http://${cleanHost}`;
     }
   }
 
   const host = req?.headers?.get?.("host") || "";
-  if (host && !host.includes("localhost") && !host.includes("127.0.0.1")) {
-    const proto = req?.headers?.get?.("x-forwarded-proto") || "https";
-    return `${proto}://${host}`;
+  if (host && (host.includes("localhost") || host.includes("127.0.0.1"))) {
+    return `http://${host}`;
   }
 
   const rawOrigin = req?.nextUrl?.origin || "";
-  // Port 3011 is strictly the internal production port behind Nginx reverse proxy
-  if (rawOrigin.includes("3011") || process.env.NODE_ENV === "production") {
-    return "https://artiory.com";
-  }
-
   if (
     rawOrigin.includes("localhost:3000") ||
     rawOrigin.includes("localhost:3001") ||
@@ -102,6 +116,23 @@ export function getPublicSiteOrigin(req?: { headers?: { get: (name: string) => s
     rawOrigin.includes("127.0.0.1:3000")
   ) {
     return rawOrigin;
+  }
+
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/+$/, "");
+  }
+  if (process.env.SITE_URL) {
+    return process.env.SITE_URL.replace(/\/+$/, "");
+  }
+
+  if (forwardedHost) {
+    const cleanHost = forwardedHost.split(",")[0].trim();
+    return `${forwardedProto}://${cleanHost}`;
+  }
+
+  if (host) {
+    const proto = req?.headers?.get?.("x-forwarded-proto") || "https";
+    return `${proto}://${host}`;
   }
 
   return "https://artiory.com";

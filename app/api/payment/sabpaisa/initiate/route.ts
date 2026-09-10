@@ -3,10 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import { createBackendToken, getTargetBackendUrl, getPublicSiteOrigin } from "@/lib/auth";
 
-const API_BASE_URL = getTargetBackendUrl();
-
 export async function POST(req: NextRequest) {
   try {
+    const API_BASE_URL = getTargetBackendUrl(req);
     const session = await getServerSession(authOptions);
     const body = await req.json();
 
@@ -20,7 +19,7 @@ export async function POST(req: NextRequest) {
 
     const publicOrigin = getPublicSiteOrigin(req);
     let returnUrl = body.returnUrl || publicOrigin;
-    if (returnUrl.includes("3011") || (process.env.NODE_ENV === "production" && returnUrl.includes("localhost"))) {
+    if (returnUrl.includes("3011")) {
       returnUrl = "https://artiory.com";
     }
 
